@@ -10,14 +10,14 @@ import (
 
 type ChunkData struct {
 	Hash    []byte
-	Version int
+	Version uint16
 	Data    []byte
 }
 
 type PlayerChunk struct {
 	World      string
-	ChunkX     int
-	ChunkZ     int
+	ChunkX     int32
+	ChunkZ     int32
 	PlayerUUID string
 
 	Timestamp uint64
@@ -26,8 +26,8 @@ type PlayerChunk struct {
 }
 
 type RegionTimestamp struct {
-	ChunkX    int
-	ChunkZ    int
+	ChunkX    int16
+	ChunkZ    int16
 	Timestamp uint64
 }
 
@@ -43,8 +43,7 @@ func (r RegionCoordinates) String() string {
 func ToQueryList(r []RegionCoordinates) string {
 	var s strings.Builder
 
-	for idx, val := range r {
-		s.WriteString(val.String())
+	for idx := range r {
 		if idx > 0 {
 			s.WriteByte(',')
 		}
@@ -66,12 +65,12 @@ type DBWithMutex struct {
 
 func Store(ctx context.Context, db *DBWithMutex,
 	world string,
-	chunkX int,
-	chunkZ int,
+	chunkX int32,
+	chunkZ int32,
 	uuid string,
 	ts uint64,
 	hash []byte,
-	version int,
+	version uint16,
 	data []byte,
 ) error {
 	const chunkDataQuery = `
@@ -103,7 +102,7 @@ func Store(ctx context.Context, db *DBWithMutex,
 	return nil
 }
 
-func GetChunkWithData(ctx context.Context, db *DBWithMutex, world string, chunkX, chunkZ int) (*PlayerChunkAndData, error) {
+func GetChunkWithData(ctx context.Context, db *DBWithMutex, world string, chunkX, chunkZ int32) (*PlayerChunkAndData, error) {
 	const query = `
 		SELECT player_chunk.world, player_chunk.chunk_x, player_chunk.chunk_x, player_chunk.uuid, player_chunk.ts, player_chunk.data, chunk_data.version, chunk_data.data FROM player_chunk
 			WHERE world = ?
@@ -118,22 +117,22 @@ func GetChunkWithData(ctx context.Context, db *DBWithMutex, world string, chunkX
 
 	rows, err := db.QueryContext(ctx, query, world, chunkX, chunkZ)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query: %w", err)
+		return nil, fmt.Errorf("failed to query chunk with data: %w", err)
 	}
 
 	defer rows.Close()
 	if rows.Next() {
 		var (
 			world          string
-			chunkX, chunkZ int
+			chunkX, chunkZ int32
 			uuid           string
 			ts             uint64
 			hash           []byte
-			version        int
+			version        uint16
 			data           []byte
 		)
 		if err := rows.Scan(&world, &chunkX, &chunkZ, &uuid, &ts, &hash, &version, &data); err != nil {
-			return nil, fmt.Errorf("failed while scanning: %w", err)
+			return nil, fmt.Errorf("failed while scanning chunk data: %w", err)
 		}
 
 		return &PlayerChunkAndData{
@@ -153,7 +152,7 @@ func GetChunkWithData(ctx context.Context, db *DBWithMutex, world string, chunkX
 		}, nil
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error while scanning: %w", err)
+		return nil, fmt.Errorf("error after scanning chunk data: %w", err)
 	}
 
 	return nil, fmt.Errorf("could not find %d/%d in %s", chunkX, chunkZ, world)
@@ -189,7 +188,7 @@ func GetCatchupData(ctx context.Context, db *DBWithMutex, world string, regions 
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query: %w", err)
+		return nil, fmt.Errorf("failed to query catchup data: %w", err)
 	}
 
 	ret := []PlayerChunk{}
@@ -197,12 +196,12 @@ func GetCatchupData(ctx context.Context, db *DBWithMutex, world string, regions 
 	defer rows.Close()
 	for rows.Next() {
 		var region string
-		var chunkX, chunkZ int
+		var chunkX, chunkZ int32
 		var uuid string
 		var ts uint64
 		var hash []byte
 		if err := rows.Scan(&region, &chunkX, &chunkZ, &uuid, &ts, &hash); err != nil {
-			return nil, fmt.Errorf("failed while scanning: %w", err)
+			return nil, fmt.Errorf("failed while scanning catchup data: %w", err)
 		}
 
 		ret = append(ret, PlayerChunk{
@@ -215,24 +214,24 @@ func GetCatchupData(ctx context.Context, db *DBWithMutex, world string, regions 
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error while scanning: %w", err)
+		return nil, fmt.Errorf("error after scanning catchup data: %w", err)
 	}
 
 	seen := map[struct {
-		x int
-		z int
+		x int32
+		z int32
 	}]struct{}{}
 	n := 0
 	for _, val := range ret {
 		if _, ok := seen[struct {
-			x int
-			z int
+			x int32
+			z int32
 		}{val.ChunkX, val.ChunkZ}]; ok {
 			continue
 		}
 		seen[struct {
-			x int
-			z int
+			x int32
+			z int32
 		}{val.ChunkX, val.ChunkZ}] = struct{}{}
 		ret[n] = val
 		n++
@@ -262,23 +261,23 @@ func GetRegionTimestamps(ctx context.Context, db *DBWithMutex) ([]RegionTimestam
 
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query: %w", err)
+		return nil, fmt.Errorf("failed to query region timestamps: %w", err)
 	}
 
 	ret := []RegionTimestamp{}
 
 	defer rows.Close()
 	for rows.Next() {
-		var regionX, regionZ int
+		var regionX, regionZ int16
 		var timestamp uint64
 		if err := rows.Scan(&regionX, &regionZ, &timestamp); err != nil {
-			return nil, fmt.Errorf("failed while scanning: %w", err)
+			return nil, fmt.Errorf("failed while scanning region timestamps: %w", err)
 		}
 
 		ret = append(ret, RegionTimestamp{regionX, regionZ, timestamp})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error while scanning: %w", err)
+		return nil, fmt.Errorf("error after scanning region timestamps: %w", err)
 	}
 
 	return ret, nil

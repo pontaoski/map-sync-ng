@@ -100,6 +100,80 @@ func rbuf(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
+func pu8(w io.Writer, n uint8) error {
+	var buf [1]byte
+	buf[0] = n
+	_, err := w.Write(buf[:])
+	if err != nil {
+		return fmt.Errorf("failed to write uint8: %w", err)
+	}
+	return nil
+}
+
+func pi32(w io.Writer, n int32) error {
+	var buf [4]byte
+	b.PutUint32(buf[:], uint32(n))
+	_, err := w.Write(buf[:])
+	if err != nil {
+		return fmt.Errorf("failed to write int16: %w", err)
+	}
+	return nil
+}
+
+func pi16(w io.Writer, n int16) error {
+	var buf [2]byte
+	b.PutUint16(buf[:], uint16(n))
+	_, err := w.Write(buf[:])
+	if err != nil {
+		return fmt.Errorf("failed to write int16: %w", err)
+	}
+	return nil
+}
+
+func pu32(w io.Writer, n uint32) error {
+	var buf [4]byte
+	b.PutUint32(buf[:], n)
+	_, err := w.Write(buf[:])
+	if err != nil {
+		return fmt.Errorf("failed to write uint32: %w", err)
+	}
+	return nil
+}
+
+func pu64(w io.Writer, n uint64) error {
+	var buf [8]byte
+	b.PutUint64(buf[:], n)
+	_, err := w.Write(buf[:])
+	if err != nil {
+		return fmt.Errorf("failed to write uint64: %w", err)
+	}
+	return nil
+}
+
+func pstr(w io.Writer, b string) error {
+	err := pu32(w, uint32(len(b)))
+	if err != nil {
+		return fmt.Errorf("failed to write string length: %w", err)
+	}
+	_, err = io.WriteString(w, b)
+	if err != nil {
+		return fmt.Errorf("failed to write string: %w", err)
+	}
+	return nil
+}
+
+func pbuf(w io.Writer, b []byte) error {
+	err := pu32(w, uint32(len(b)))
+	if err != nil {
+		return fmt.Errorf("failed to write buffer length: %w", err)
+	}
+	_, err = w.Write(b)
+	if err != nil {
+		return fmt.Errorf("failed to write buffer: %w", err)
+	}
+	return nil
+}
+
 func DecodePacket(r io.Reader) (Packet, error) {
 	kind, err := ru8(r)
 	if err != nil {
@@ -345,4 +419,105 @@ func decodeRegionCatchupPacket(r io.Reader) (RegionCatchupPacket, error) {
 		World:   world,
 		Regions: regions,
 	}, nil
+}
+
+type EncryptionRequest struct {
+	PublicKey         []byte
+	VerificationToken []byte
+}
+
+func (e EncryptionRequest) Encode(to io.Writer) error {
+	err := pu8(to, kEncryptionRequest)
+	if err != nil {
+		return fmt.Errorf("failed to write encryptionrequest packet type: %w", err)
+	}
+	err = pbuf(to, e.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to write public key: %w", err)
+	}
+	err = pbuf(to, e.VerificationToken)
+	if err != nil {
+		return fmt.Errorf("failed to write verification token: %w", err)
+	}
+	return nil
+}
+
+type CatchupPacket struct {
+	Chunks []CatchupChunk
+}
+
+func (c CatchupPacket) Encode(to io.Writer) error {
+	err := pu8(to, kCatchup)
+	if err != nil {
+		return fmt.Errorf("failed to write catchuprequest packet type: %w", err)
+	}
+
+	if len(c.Chunks) == 0 {
+		return fmt.Errorf("catchup chunks must not be empty")
+	}
+
+	err = pstr(to, c.Chunks[0].World)
+	if err != nil {
+		return fmt.Errorf("failed to write world name: %w", err)
+	}
+	err = pu32(to, uint32(len(c.Chunks)))
+	if err != nil {
+		return fmt.Errorf("failed to write chunk count: %w", err)
+	}
+
+	for _, chunk := range c.Chunks {
+		err = pi32(to, chunk.ChunkX)
+		if err != nil {
+			return fmt.Errorf("failed to write chunk x: %w", err)
+		}
+		err = pi32(to, chunk.ChunkZ)
+		if err != nil {
+			return fmt.Errorf("failed to write chunk z: %w", err)
+		}
+		err = pu64(to, chunk.Timestamp)
+		if err != nil {
+			return fmt.Errorf("failed to write chunk timestamp: %w", err)
+		}
+	}
+
+	return nil
+}
+
+type RegionTimestamps struct {
+	World      string
+	Timestamps []RegionTimestamp
+}
+
+func (r RegionTimestamps) Encode(to io.Writer) error {
+	err := pu8(to, kRegionTimestamps)
+	if err != nil {
+		return fmt.Errorf("failed to write regiontimestamps packet type: %w", err)
+	}
+
+	err = pstr(to, r.World)
+	if err != nil {
+		return fmt.Errorf("failed to write world name: %w", err)
+	}
+
+	err = pi16(to, int16(len(r.Timestamps)))
+	if err != nil {
+		return fmt.Errorf("failed to write region length: %w", err)
+	}
+
+	for _, r := range r.Timestamps {
+		err = pi16(to, r.ChunkX)
+		if err != nil {
+			return fmt.Errorf("failed to write region x: %w", err)
+		}
+		err = pi16(to, r.ChunkZ)
+		if err != nil {
+			return fmt.Errorf("failed to write region z: %w", err)
+		}
+		err = pu64(to, r.Timestamp)
+		if err != nil {
+			return fmt.Errorf("failed to write region timestamp: %w", err)
+		}
+	}
+
+	return nil
 }
