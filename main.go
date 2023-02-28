@@ -34,6 +34,7 @@ func main() {
 		log.Fatalf("Failed to initialise server: %s", err)
 	}
 
+	defer s.DB.Close()
 	defer l.Close()
 	log.Printf("Listening on 0.0.0.0:12312")
 	for {
@@ -84,6 +85,36 @@ func NewServer() (*Server, error) {
 	db, err := sql.Open("sqlite3", "./db.sqlite")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	_, err = db.Exec(
+		`
+		CREATE TABLE IF NOT EXISTS "chunk_data" (
+			"hash" blob PRIMARY KEY NOT NULL,
+			"version" integer NOT NULL,
+			"data" blob NOT NULL
+		)
+		`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create chunk_data table: %w", err)
+	}
+	_, err = db.Exec(
+		`
+		CREATE TABLE IF NOT EXISTS "player_chunk" (
+			"world" text NOT NULL,
+			"chunk_x" integer NOT NULL,
+			"chunk_z" integer NOT NULL,
+			"uuid" text NOT NULL,
+			"ts" bigint NOT NULL,
+			"hash" blob,
+			CONSTRAINT "FK_e80a5d4eebceb40ccfb829850be" FOREIGN KEY ("hash") REFERENCES "chunk_data" ("hash") ON DELETE NO ACTION ON UPDATE NO ACTION,
+			PRIMARY KEY ("world", "chunk_x", "chunk_z", "uuid")
+		)
+		`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create player_chunk table: %w", err)
 	}
 
 	s.DB = DBWithMutex{db, sync.RWMutex{}}
@@ -391,6 +422,7 @@ type AuthenticatedClientState struct {
 }
 
 func (a *AuthenticatedClientState) HandleAuthenticated(s *Server, c Client) error {
+	log.Printf("Client %s was authenticated\n", c)
 	// TODO: UUID cache
 
 	// TODO: whitelist
@@ -519,6 +551,9 @@ func (a *AuthenticatedClientState) HandleRegionCatchup(s *Server, c Client, p Re
 			ChunkZ:    i.ChunkZ,
 			Timestamp: i.Timestamp,
 		})
+	}
+	if len(ccs) == 0 {
+		return nil
 	}
 	err = c.SendPacket(CatchupPacket{
 		Chunks: ccs,
