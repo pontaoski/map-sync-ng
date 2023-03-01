@@ -140,6 +140,16 @@ func pu32(w io.Writer, n uint32) error {
 	return nil
 }
 
+func pu16(w io.Writer, n uint16) error {
+	var buf [2]byte
+	b.PutUint16(buf[:], n)
+	_, err := w.Write(buf[:])
+	if err != nil {
+		return fmt.Errorf("failed to write uint16: %w", err)
+	}
+	return nil
+}
+
 func pu64(w io.Writer, n uint64) error {
 	var buf [8]byte
 	b.PutUint64(buf[:], n)
@@ -230,7 +240,39 @@ type ChunkTilePacket struct {
 }
 
 func (c ChunkTilePacket) Encode(to io.Writer) error {
-	panic("not implemented")
+	err := pu8(to, kChunkTile)
+	if err != nil {
+		return fmt.Errorf("failed to write chunktile packet type: %w", err)
+	}
+	err = pstr(to, c.World)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile world: %w", err)
+	}
+	err = pi32(to, c.ChunkX)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile x: %w", err)
+	}
+	err = pi32(to, c.ChunkZ)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile z: %w", err)
+	}
+	err = pu64(to, c.Timestamp)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile timestamp: %w", err)
+	}
+	err = pu16(to, c.Version)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile version: %w", err)
+	}
+	err = pbuf(to, c.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile hash: %w", err)
+	}
+	_, err = to.Write(c.Data)
+	if err != nil {
+		return fmt.Errorf("failed to write chunk tile data: %w", err)
+	}
+	return nil
 }
 
 func decodeChunkTilePacket(r io.Reader) (ChunkTilePacket, error) {
