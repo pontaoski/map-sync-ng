@@ -337,9 +337,9 @@ func fetchHasJoined(username string, hexSum string) (string, string, error) {
 		return "", "", fmt.Errorf("failed to unmarshal session server body: %w", err)
 	}
 
-	uuid := uuidRegex.ReplaceAllString(s.UUID, "$1-$2-$3-$3-$5")
+	uuid := uuidRegex.ReplaceAllString(s.UUID, "$1-$2-$3-$4-$5")
 
-	return uuid, s.Name, nil
+	return s.Name, uuid, nil
 }
 
 func (h *HandshakenClientState) Handle(s *Server, c Client, packet Packet) (ClientState, error) {

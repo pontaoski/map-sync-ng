@@ -1,2 +1,4 @@
 /db.sqlite
 /GoMapSync
+/config.json
+/whitelist.json
