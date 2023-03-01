@@ -171,7 +171,7 @@ func GetCatchupData(ctx context.Context, db *DBWithMutex, world string, regions 
 			) || "_" || (
 				cast (region_z_real as int) - (region_z_real < cast (region_z_real as int))
 			) AS region,
-			chunk_x, chunk_z, world, uuid, ts,
+			chunk_x, chunk_z, uuid, ts,
 			hash AS data
 		FROM region_real
 		WHERE world = ? AND region IN (` + ToQueryList(regions) + `)
