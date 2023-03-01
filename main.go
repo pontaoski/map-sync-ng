@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -54,6 +55,8 @@ type Server struct {
 	ClientsNum   int
 	ClientsMutex sync.RWMutex
 
+	Config *Config
+
 	DB DBWithMutex
 
 	Key            *rsa.PrivateKey
@@ -66,6 +69,13 @@ func NewServer() (*Server, error) {
 		ClientsNum:   0,
 		ClientsMutex: sync.RWMutex{},
 	}
+
+	conf, err := LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	s.Config = conf
+
 	privkey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key: %w", err)
@@ -262,6 +272,11 @@ type UnauthenticatedClientState struct {
 func (u *UnauthenticatedClientState) Handle(s *Server, c Client, packet Packet) (ClientState, error) {
 	switch p := packet.(type) {
 	case HandshakePacket:
+		if s.Config.MainConfig.ServerAddressMustInclude != "" {
+			if !strings.Contains(p.GameAddress, s.Config.MainConfig.ServerAddressMustInclude) {
+				return nil, fmt.Errorf("client is not connecting for right server")
+			}
+		}
 		var buf [4]byte
 		_, err := rand.Read(buf[:])
 		if err != nil {
@@ -423,9 +438,19 @@ type AuthenticatedClientState struct {
 
 func (a *AuthenticatedClientState) HandleAuthenticated(s *Server, c Client) error {
 	log.Printf("Client %s was authenticated\n", c)
-	// TODO: UUID cache
 
-	// TODO: whitelist
+	if s.Config.MainConfig.WhitelistEnabled {
+		ok := false
+		for _, plr := range s.Config.WhitelistConfig {
+			if plr == a.UUID {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("client was not whitelisted")
+		}
+	}
 
 	timestamps, err := GetRegionTimestamps(context.Background(), &s.DB)
 	if err != nil {
