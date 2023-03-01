@@ -149,6 +149,12 @@ func (s *Server) HandleConnection(conn net.Conn) {
 
 	defer conn.Close()
 
+	defer func() {
+		s.ClientsMutex.Lock()
+		delete(s.Clients, myNum)
+		s.ClientsMutex.Unlock()
+	}()
+
 	for {
 		s.ClientsMutex.RLock()
 		client := s.Clients[myNum]
