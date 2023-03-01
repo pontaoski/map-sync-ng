@@ -104,11 +104,12 @@ func Store(ctx context.Context, db *DBWithMutex,
 
 func GetChunkWithData(ctx context.Context, db *DBWithMutex, world string, chunkX, chunkZ int32) (*PlayerChunkAndData, error) {
 	const query = `
-		SELECT player_chunk.world, player_chunk.chunk_x, player_chunk.chunk_x, player_chunk.uuid, player_chunk.ts, player_chunk.data, chunk_data.version, chunk_data.data FROM player_chunk
+		SELECT player_chunk.world, player_chunk.chunk_x, player_chunk.chunk_x, player_chunk.uuid, player_chunk.ts, chunk_data.version, chunk_data.data
+		FROM player_chunk
+		INNER JOIN chunk_data ON player_chunk.hash = chunk_data.hash
 			WHERE world = ?
 			AND   chunk_x = ?
 			AND   chunk_z = ?
-		INNER JOIN chunk_data ON player_chunk.hash = chunk_data.hash
 		ORDER BY ts DESC
 	`
 
