@@ -541,6 +541,7 @@ func (a *AuthenticatedClientState) HandleCatchup(s *Server, c Client, p CatchupR
 		)
 		if err != nil {
 			log.Printf("client %s requested unavailable chunk: %s", c, err)
+			continue
 		}
 		if data.Timestamp > chunk.Timestamp {
 			continue
