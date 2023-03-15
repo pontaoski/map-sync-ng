@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2023 Janet Blackquill <uhhadd@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package main
 
 // All credits go to Ilmari Karonen
